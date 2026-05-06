@@ -7,14 +7,15 @@ import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
+
 import dev.langchain4j.service.AiServices;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.example.aijavacreate.ai.tools.FileWriteTool;
 import org.example.aijavacreate.exception.BusinessException;
 import org.example.aijavacreate.exception.ErrorCode;
 import org.example.aijavacreate.model.enums.CodeGenTypeEnum;
 import org.example.aijavacreate.service.ChatHistoryService;
+import org.example.aijavacreate.utils.SpringContextUtil;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -25,20 +26,18 @@ import java.time.Duration;
  * 用于创建 AI 代码生成服务实例
  * @see AiCodeGeneratorService
  */
+//TODO 暂时弃用，后续再考虑是否需要，预计学习万LangGraph4j后
+@Deprecated
 @Slf4j
 @Configuration
 public class AiCodeGeneratorServiceFactory {
 
-    @Resource
+    @Resource(name = "openAiChatModel")
     private ChatModel chatModel;
-    @Resource
-    private StreamingChatModel openAiStreamingChatModel;
     @Resource
     private RedisChatMemoryStore redisChatMemoryStore;
     @Resource
     private ChatHistoryService chatHistoryService;
-    @Resource
-    private StreamingChatModel reasoningStreamingChatModel;
 
     /**
      * AI 服务实例缓存
@@ -95,27 +94,31 @@ public class AiCodeGeneratorServiceFactory {
         chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
         // 根据代码生成类型选择不同的模型配置
         return switch (codeGenType) {
-            // Vue 项目生成使用推理模型
-            case VUE_PROJECT -> AiServices.builder(AiCodeGeneratorService.class)
-                    .streamingChatModel(reasoningStreamingChatModel)//设置推理模型
-                    .chatMemoryProvider(memoryId -> chatMemory)//设置对话记忆提供器，根据 appId 提供对应的记忆
-                    .tools(new FileWriteTool())//添加文件写入工具
-                    .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
-                            toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()//设置幻觉工具名称策略，返回错误信息
-                    ))
-                    .build();
-            // HTML 和多文件生成使用默认模型
-            case HTML, MULTI_FILE -> AiServices.builder(AiCodeGeneratorService.class)
-                    .chatModel(chatModel)//设置默认模型
-                    .streamingChatModel(openAiStreamingChatModel)//设置默认流式模型
-                    .chatMemory(chatMemory)//设置默认对话记忆为 chatMemory
-                    .build();
+            case VUE_PROJECT -> {
+                // 使用多例模式的 StreamingChatModel 解决并发问题
+                StreamingChatModel reasoningStreamingChatModel = SpringContextUtil.getBean("reasoningStreamingChatModelPrototype", StreamingChatModel.class);
+                yield AiServices.builder(AiCodeGeneratorService.class)
+                        .streamingChatModel(reasoningStreamingChatModel)
+                        .chatMemoryProvider(memoryId -> chatMemory)
+                        .tools(toolManager.getAllTools())
+                        .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
+                                toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
+                        ))
+                        .build();
+            }
+            case HTML, MULTI_FILE -> {
+                // 使用多例模式的 StreamingChatModel 解决并发问题
+                StreamingChatModel openAiStreamingChatModel = SpringContextUtil.getBean("streamingChatModelPrototype", StreamingChatModel.class);
+                yield AiServices.builder(AiCodeGeneratorService.class)
+                        .chatModel(chatModel)
+                        .streamingChatModel(openAiStreamingChatModel)
+                        .chatMemory(chatMemory)
+                        .build();
+            }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,
-                    "不支持的代码生成类型: " + codeGenType.getValue());//抛出异常，提示不支持的代码生成类型
+                    "不支持的代码生成类型: " + codeGenType.getValue());
         };
     }
-
-
 
     /**
      * 创建 AI 代码生成服务
