@@ -27,6 +27,9 @@ public class ReasoningStreamingChatModelConfig {
 
     private Boolean logResponses = false;
 
+    /**
+     * 推理流式模型（vue）
+     */
     @Bean
     @Scope("prototype")
     public StreamingChatModel reasoningStreamingChatModelPrototype() {

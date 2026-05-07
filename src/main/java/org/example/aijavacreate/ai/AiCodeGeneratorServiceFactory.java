@@ -11,6 +11,7 @@ import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.example.aijavacreate.ai.tools.ToolManager;
 import org.example.aijavacreate.exception.BusinessException;
 import org.example.aijavacreate.exception.ErrorCode;
 import org.example.aijavacreate.model.enums.CodeGenTypeEnum;
@@ -26,8 +27,6 @@ import java.time.Duration;
  * 用于创建 AI 代码生成服务实例
  * @see AiCodeGeneratorService
  */
-//TODO 暂时弃用，后续再考虑是否需要，预计学习万LangGraph4j后
-@Deprecated
 @Slf4j
 @Configuration
 public class AiCodeGeneratorServiceFactory {
@@ -38,6 +37,8 @@ public class AiCodeGeneratorServiceFactory {
     private RedisChatMemoryStore redisChatMemoryStore;
     @Resource
     private ChatHistoryService chatHistoryService;
+    @Resource
+    private ToolManager toolManager;
 
     /**
      * AI 服务实例缓存
