@@ -25,6 +25,8 @@ import org.example.aijavacreate.model.dto.app.AppUpdateRequest;
 import org.example.aijavacreate.model.entity.User;
 import org.example.aijavacreate.model.vo.AppQueryRequest;
 import org.example.aijavacreate.model.vo.AppVO;
+import org.example.aijavacreate.ratelimit.annotation.RateLimit;
+import org.example.aijavacreate.ratelimit.enums.RateLimitType;
 import org.example.aijavacreate.service.ProjectDownloadService;
 import org.example.aijavacreate.service.UserService;
 import org.springframework.cache.annotation.Cacheable;
@@ -100,6 +102,7 @@ public class AppController {
      * @return 代码流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RateLimit(limitType = RateLimitType.USER, rate = 5, rateInterval = 60, message = "AI 对话请求过于频繁，请稍后再试")
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
                                                        HttpServletRequest request) {
