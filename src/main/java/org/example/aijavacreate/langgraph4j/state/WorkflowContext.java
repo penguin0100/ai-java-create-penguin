@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.bsc.langgraph4j.prebuilt.MessagesState;
+import org.example.aijavacreate.langgraph4j.model.ImageCollectionPlan;
 import org.example.aijavacreate.langgraph4j.model.ImageResource;
 import org.example.aijavacreate.langgraph4j.model.QualityResult;
 import org.example.aijavacreate.model.enums.CodeGenTypeEnum;
@@ -77,6 +78,19 @@ public class WorkflowContext implements Serializable {
      * 质量检查结果
      */
     private QualityResult qualityResult;
+    /**
+     * 图片收集计划
+     */
+    private ImageCollectionPlan imageCollectionPlan;
+
+
+    /**
+     * 并发图片收集的中间结果字段
+     */
+    private List<ImageResource> contentImages;
+    private List<ImageResource> illustrations;
+    private List<ImageResource> diagrams;
+    private List<ImageResource> logos;
 
 
     @Serial
