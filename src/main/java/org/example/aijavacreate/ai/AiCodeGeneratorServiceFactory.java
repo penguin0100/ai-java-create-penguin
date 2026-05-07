@@ -11,6 +11,7 @@ import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.example.aijavacreate.ai.guardrail.PromptSafetyInputGuardrail;
 import org.example.aijavacreate.ai.tools.ToolManager;
 import org.example.aijavacreate.exception.BusinessException;
 import org.example.aijavacreate.exception.ErrorCode;
@@ -105,6 +106,7 @@ public class AiCodeGeneratorServiceFactory {
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
                                 toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
                         ))
+//                        .inputGuardrails(new PromptSafetyInputGuardrail())  // 添加输入护轨，会影响流式输出
                         .build();
             }
             case HTML, MULTI_FILE -> {
@@ -114,6 +116,7 @@ public class AiCodeGeneratorServiceFactory {
                         .chatModel(chatModel)
                         .streamingChatModel(openAiStreamingChatModel)
                         .chatMemory(chatMemory)
+//                        .inputGuardrails(new PromptSafetyInputGuardrail())  // 添加输入护轨，会影响流式输出
                         .build();
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,
