@@ -2,7 +2,7 @@ package org.example.aijavacreate.ai;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
+import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
@@ -33,7 +33,7 @@ public class AiCodeGeneratorServiceFactory {
     @Resource(name = "openAiChatModel")
     private ChatModel chatModel;
     @Resource
-    private RedisChatMemoryStore redisChatMemoryStore;
+    private ChatMemoryStore chatMemoryStore;
     @Resource
     private ChatHistoryService chatHistoryService;
     @Resource
@@ -87,7 +87,7 @@ public class AiCodeGeneratorServiceFactory {
         MessageWindowChatMemory chatMemory = MessageWindowChatMemory
                 .builder()
                 .id(appId)//设置记忆的唯一标识为 appId
-                .chatMemoryStore(redisChatMemoryStore)//设置对话记忆存储为 RedisChatMemoryStore
+                .chatMemoryStore(chatMemoryStore)//设置对话记忆存储
                 .maxMessages(20)//设置对话记忆中保存的最大对话数为 20 条
                 .build();
         // 从数据库加载历史对话到记忆中

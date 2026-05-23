@@ -108,6 +108,12 @@ public class JsonMessageStreamHandler {
                 chatHistoryStringBuilder.append(output);
                 return output;
             }
+            case THINKING -> {
+                // 收集思考内容到后端记忆格式
+                ThinkingMessage thinkingMessage = JSONUtil.toBean(chunk, ThinkingMessage.class);
+                chatHistoryStringBuilder.append(thinkingMessage.getData());
+                return chunk;
+            }
             default -> {
                 log.error("不支持的消息类型: {}", typeEnum);
                 return "";
