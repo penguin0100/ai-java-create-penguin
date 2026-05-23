@@ -55,6 +55,25 @@
                 <a-avatar :src="aiAvatar" />
               </div>
               <div class="message-content">
+                <!-- 深度思考内容（可折叠） -->
+                <div
+                  v-if="message.thinking"
+                  class="thinking-section"
+                  @click="toggleThinking(index)"
+                >
+                  <div class="thinking-header">
+                    <span>🧠 深度思考</span>
+                    <span class="thinking-toggle">{{
+                      thinkingExpanded[index] ? '收起 ▲' : '展开 ▼'
+                    }}</span>
+                  </div>
+                  <div
+                    v-if="thinkingExpanded[index]"
+                    class="thinking-content"
+                  >
+                    {{ message.thinking }}
+                  </div>
+                </div>
                 <MarkdownRenderer v-if="message.content" :content="message.content" />
                 <div v-if="message.loading" class="loading-indicator">
                   <a-spin size="small" />
@@ -194,14 +213,21 @@ const appId = ref<string>()
 interface Message {
   type: 'user' | 'ai'
   content: string
+  thinking?: string // DeepSeek V4 深度思考内容
   loading?: boolean
 }
 
 const messages = ref<Message[]>([])
+const thinkingExpanded = ref<Record<number, boolean>>({})
 const userInput = ref('')
 const isGenerating = ref(false)
 const messagesContainer = ref<HTMLElement>()
 const hasInitialConversation = ref(false) // 标记是否已经进行过初始对话
+
+// 切换思考内容展开/收起
+const toggleThinking = (index: number) => {
+  thinkingExpanded.value[index] = !thinkingExpanded.value[index]
+}
 
 // 预览相关
 const previewUrl = ref('')
@@ -284,6 +310,7 @@ const loadChatHistory = async () => {
       messages.value = records.map((record) => ({
         type: record.messageType === 'user' ? 'user' : 'ai',
         content: record.message || '',
+        thinking: record.reasoningContent || undefined,
       }))
 
       // 滚动到底部
@@ -374,23 +401,52 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
     })
 
     let fullContent = ''
+    let fullThinking = ''
 
     // 处理接收到的消息
     eventSource.onmessage = function (event) {
       if (streamCompleted) return
 
       try {
-        // 解析JSON包装的数据
         const parsed = JSON.parse(event.data)
-        const content = parsed.d
+        const rawData = parsed.d
 
-        // 拼接内容
-        if (content !== undefined && content !== null) {
-          fullContent += content
-          messages.value[aiMessageIndex].content = fullContent
-          messages.value[aiMessageIndex].loading = false
-          scrollToBottom()
+        if (rawData === undefined || rawData === null) return
+
+        // 尝试解析为结构化 JSON 消息（VUE_PROJECT 模式）
+        try {
+          const structured = JSON.parse(rawData)
+          if (structured.type) {
+            switch (structured.type) {
+              case 'ai_response':
+                fullContent += (structured.data || '')
+                messages.value[aiMessageIndex].content = fullContent
+                break
+              case 'tool_request':
+                // 工具调用中
+                break
+              case 'tool_executed':
+                // 工具执行完成
+                break
+              case 'thinking':
+                fullThinking += (structured.data || '')
+                messages.value[aiMessageIndex].thinking = fullThinking
+                thinkingExpanded.value[aiMessageIndex] = true
+                break
+            }
+            messages.value[aiMessageIndex].loading = false
+            scrollToBottom()
+            return
+          }
+        } catch (_e) {
+          // 非 JSON，作为纯文本处理（HTML/MULTI_FILE 模式）
         }
+
+        // 纯文本追加（HTML/MULTI_FILE 模式）
+        fullContent += rawData
+        messages.value[aiMessageIndex].content = fullContent
+        messages.value[aiMessageIndex].loading = false
+        scrollToBottom()
       } catch (error) {
         console.error('解析消息失败:', error)
         handleError(error, aiMessageIndex)
@@ -695,6 +751,49 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   color: #666;
+}
+
+/* 深度思考区域 */
+.thinking-section {
+  margin-bottom: 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fafafa;
+  cursor: pointer;
+}
+
+.thinking-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  user-select: none;
+}
+
+.thinking-header:hover {
+  background: #f0f0f0;
+}
+
+.thinking-toggle {
+  font-size: 12px;
+  color: #999;
+}
+
+.thinking-content {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #888;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid #eee;
+  background: #fff;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 /* 输入区域 */

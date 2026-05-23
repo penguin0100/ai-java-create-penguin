@@ -1,10 +1,10 @@
 package org.example.aijavacreate.core.builder;
 
-import cn.hutool.core.util.RuntimeUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -108,12 +108,10 @@ public class VueProjectBuilder {
     private boolean executeCommand(File workingDir, String command, int timeoutSeconds) {
         try {
             log.info("在目录 {} 中执行命令: {}", workingDir.getAbsolutePath(), command);
-            Process process = RuntimeUtil.exec(
-                    null,
-                    workingDir,
-                    command.split("\\s+") // 命令分割为数组
-            );
-            // 等待进程完成，设置超时
+            ProcessBuilder pb = new ProcessBuilder(command.split("\\s+"));
+            pb.directory(workingDir);
+            pb.redirectErrorStream(true); // 合并 stderr 到 stdout，避免 deadlock
+            Process process = pb.start();
             boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             if (!finished) {
                 log.error("命令执行超时（{}秒），强制终止进程", timeoutSeconds);
@@ -121,11 +119,12 @@ public class VueProjectBuilder {
                 return false;
             }
             int exitCode = process.exitValue();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             if (exitCode == 0) {
                 log.info("命令执行成功: {}", command);
                 return true;
             } else {
-                log.error("命令执行失败，退出码: {}", exitCode);
+                log.error("命令执行失败，退出码: {}\n输出:\n{}", exitCode, output);
                 return false;
             }
         } catch (Exception e) {

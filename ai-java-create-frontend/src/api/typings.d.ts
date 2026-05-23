@@ -118,6 +118,7 @@ declare namespace API {
     createTime?: string
     updateTime?: string
     isDelete?: number
+    reasoningContent?: string
   }
 
   type ChatHistoryQueryRequest = {

@@ -3,6 +3,8 @@ package org.example.aijavacreate.core;
 
 import cn.hutool.json.JSONUtil;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.PartialThinking;
+import dev.langchain4j.model.chat.response.PartialToolCall;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolExecution;
 import org.example.aijavacreate.ai.AiCodeGeneratorService;
@@ -12,6 +14,7 @@ import org.example.aijavacreate.ai.AiCodeGeneratorServiceFactory;
 import org.example.aijavacreate.ai.model.HtmlCodeResult;
 import org.example.aijavacreate.ai.model.MultiFileCodeResult;
 import org.example.aijavacreate.ai.model.message.AiResponseMessage;
+import org.example.aijavacreate.ai.model.message.ThinkingMessage;
 import org.example.aijavacreate.ai.model.message.ToolExecutedMessage;
 import org.example.aijavacreate.ai.model.message.ToolRequestMessage;
 import org.example.aijavacreate.constant.AppConstant;
@@ -51,7 +54,6 @@ public class AiCodeGeneratorFacade {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
-        // 从工厂中获取 AI 代码生成服务实例
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
         return switch (codeGenTypeEnum) {
             case HTML -> {
@@ -79,7 +81,6 @@ public class AiCodeGeneratorFacade {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
-        // 从工厂中获取 AI 代码生成服务实例
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
         return switch (codeGenTypeEnum) {
             case HTML -> {
@@ -102,42 +103,41 @@ public class AiCodeGeneratorFacade {
     }
 
     /**
-     * 将 TokenStream 转换为 Flux<String>，并传递工具调用信息
-     *
-     * @param tokenStream TokenStream 对象
-     * @return Flux<String> 流式响应
+     * 将 TokenStream 转换为 Flux<String>，并传递工具调用和深度思考信息
      */
     private Flux<String> processTokenStream(TokenStream tokenStream,Long appId) {
         return Flux.create(sink -> {
             tokenStream.onPartialResponse((String partialResponse) -> {
-                        // 创建 AiResponseMessage 对象 ，并设置 partialResponse 为内容
                         AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
-                        //将 部分响应 转换为 JSON 字符串并传递给下游处理
                         sink.next(JSONUtil.toJsonStr(aiResponseMessage));
                     })
-                    .onPartialToolExecutionRequest((index, toolExecutionRequest) -> {
-                        // 创建 ToolRequestMessage 对象 ，并设置 toolExecutionRequest 为内容
-                        ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
-                        //将 工具调用请求 转换为 JSON 字符串并传递给下游处理
+                    .onPartialToolCall((PartialToolCall partialToolCall) -> {
+                        ToolRequestMessage toolRequestMessage = new ToolRequestMessage(partialToolCall);
                         sink.next(JSONUtil.toJsonStr(toolRequestMessage));
                     })
                     .onToolExecuted((ToolExecution toolExecution) -> {
-                        // 创建 ToolExecutedMessage 对象 ，并设置 toolExecution 为内容
                         ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
-                        //将 工具调用执行结果 转换为 JSON 字符串并传递给下游处理
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
                     .onCompleteResponse((ChatResponse response) -> {
-                        // 执行 Vue 项目构建（同步执行，确保预览时项目已就绪）
                         String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + "vue_project_" + appId;
                         vueProjectBuilder.buildProject(projectPath);
                         sink.complete();
                     })
                     .onError((Throwable error) -> {
-                        error.printStackTrace();//打印错误信息
-                        sink.error(error);//将错误传递给下游处理
-                    })
-                    .start();//启动 TokenStream 流
+                        error.printStackTrace();
+                        sink.error(error);
+                    });
+            // 注册 thinking 回调，兼容不支持 thinking 的模型
+            try {
+                tokenStream.onPartialThinking((PartialThinking partialThinking) -> {
+                    ThinkingMessage thinkingMessage = new ThinkingMessage(partialThinking);
+                    sink.next(JSONUtil.toJsonStr(thinkingMessage));
+                });
+            } catch (UnsupportedOperationException e) {
+                log.debug("当前 TokenStream 实现不支持 onPartialThinking，已降级为普通流式输出");
+            }
+            tokenStream.start();
         });
     }
 
@@ -153,15 +153,11 @@ public class AiCodeGeneratorFacade {
     private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
         StringBuilder codeBuilder = new StringBuilder();
         return codeStream.doOnNext(chunk -> {
-            // 实时收集代码片段
             codeBuilder.append(chunk);
         }).doOnComplete(() -> {
-            // 流式返回完成后保存代码
             try {
                 String completeCode = codeBuilder.toString();
-                // 使用执行器解析代码
                 Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenType);
-                // 使用执行器保存代码
                 File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType,appId);
                 log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
             } catch (Exception e) {
